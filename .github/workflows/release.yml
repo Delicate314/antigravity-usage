@@ -1,0 +1,16 @@
+name: macOS release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./build.sh
+      - name: Publish macOS ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.zip --verify-tag --title "Antigravity Usage $GITHUB_REF_NAME" --notes "macOS 13+ · Apple Silicon / Intel。解压后打开应用，单击悬浮球选择开始时间。运行需要 Apple Command Line Tools，安装包使用临时签名。"

@@ -1,0 +1,188 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Antigravity 用量</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f4f5f0;color:#192d29;font:15px Inter,-apple-system,"PingFang SC",sans-serif}main{max-width:1180px;margin:auto;padding:54px 5vw}header,section,details{margin-bottom:22px}h1{letter-spacing:-2px;font-size:clamp(32px,5vw,56px);margin:4px 0 12px}p,label,small{color:#566960}section,details{background:white;border:1px solid #d9dfd7;border-radius:16px;padding:24px}form,.stats{display:flex;gap:18px;flex-wrap:wrap;align-items:end}label{display:grid;gap:6px}input,button{font:inherit;border:1px solid #abbdb3;border-radius:8px;padding:9px;background:white;color:inherit}button{cursor:pointer;background:#184e42;color:white}.stats{padding:24px;background:#193f36;color:#fff;border-radius:16px;margin:20px 0}.stats div{flex:1;min-width:130px}.stats b{display:block;font-size:clamp(20px,3vw,34px);margin-top:5px}.scroll{overflow-x:auto}table{width:100%;border-collapse:collapse;white-space:nowrap;font-variant-numeric:tabular-nums}th,td{text-align:right;padding:12px 8px;border-bottom:1px solid #e1e7e2}th{font-size:13px;color:#5a6c62}th:first-child,td:first-child{text-align:left}h2{font-size:21px;margin:0 0 12px}summary{cursor:pointer;font-weight:650}a{color:#176353}#msg{color:#8d401d}meter{width:72px;accent-color:#388771}
+body.floating { background:transparent; color-scheme:dark; overflow:hidden }
+.floating main { display:none }
+.floating aside { padding:5px; user-select:none }
+#bubble {
+ width:122px;height:122px;position:relative;isolation:isolate;overflow:hidden;
+ border-radius:50%;border:1px solid #a5cbdf75;padding:0;
+ display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+ background:radial-gradient(ellipse at 18% 20%,#306271aa,transparent 54%),
+ radial-gradient(ellipse at 76% 95%,#423e71,transparent 58%),#0e1825;
+ box-shadow:inset 0 1px 4px #b4e1ea50,inset 0 -4px 12px #03060b99;
+ color:#f3fbff;cursor:grab
+}
+#bubble::before { content:"";position:absolute;inset:4px;border-radius:50%;
+ background:repeating-conic-gradient(from 0deg,transparent 0 3deg,#a2d9e0aa 3deg 5deg,transparent 5deg 10deg);
+ -webkit-mask:radial-gradient(closest-side,transparent 94%,black 95%);pointer-events:none }
+#bubble::after { content:"";position:absolute;inset:10px;border-radius:50%;border:1px solid #c2eaff20;pointer-events:none }
+#bubble small { color:#a8d3df;font:600 9px Inter,-apple-system,sans-serif;letter-spacing:2px }
+#balance { font:550 23px Inter,-apple-system,sans-serif;letter-spacing:-1px;font-variant-numeric:tabular-nums;text-shadow:0 2px 5px #040b16 }
+.orbit { position:absolute;inset:0;pointer-events:none;z-index:-1;animation:orbit 36s linear infinite }
+.orbit i { position:absolute;display:block;border-radius:50%;background:var(--ink);box-shadow:0 0 3px var(--ink) }
+@keyframes orbit { to { transform:rotate(360deg) } }
+@media(prefers-reduced-motion:reduce){.orbit{animation:none}}
+#settings { display:none }
+.editing #settings { display:grid;gap:13px;margin-top:6px;padding:17px;border-radius:18px;
+ color:#e3edf7;border:1px solid #768d9d70;background:linear-gradient(120deg,#1d3441,#191d31 95%);
+ box-shadow:inset 0 1px #bfe8ff18 }
+#settings header { display:flex;align-items:center;justify-content:space-between;margin:0;font-weight:600 }
+#settings label { color:#a9c1d1;font-size:11px;gap:6px }
+#settings input { background:#0c1723;border-color:#415667;color:#ebf5fb;width:100% }
+#settings footer { display:flex;gap:8px }
+#settings button { font-size:12px;padding:7px 13px;border-radius:8px;background:#273b49;border-color:#475862 }
+#settings button[type=submit] { flex:1;background:#a5e5df;border-color:transparent;color:#112e36;font-weight:650 }
+#settings #quit { color:#afc2cf;background:none;border:0;padding:2px }
+</style><main><header><h1>Antigravity 用量</h1><p id="status">正在读取本机会话…</p></header>
+<section><form id="filters"><label>开始时间（北京时间）<input id="start" type="datetime-local"></label><label>截止时间（北京时间，不含）<input id="end" type="datetime-local"></label><button type="submit">应用时段</button><button type="button" id="today">今天</button><button type="button" id="all">全部时间</button><button type="button" id="reload">刷新数据</button></form><p id="range"></p><div id="msg" role="status"></div></section>
+<div class="stats"><div>累计 token<b id="total">—</b></div><div>模型响应数<b id="count">—</b></div><div>按量参考价值 · USD<b id="cost">—</b></div></div>
+<section><h2>模型使用明细</h2><div class="scroll"><table><thead><tr><th>模型</th><th>用量占比</th><th>响应</th><th>输入</th><th>输出</th><th>缓存读</th><th>缓存写</th><th>估算 USD</th></tr></thead><tbody id="usage"></tbody></table></div></section>
+<details><summary>模型价格与计算口径</summary><p>2026-11-24 核对 · 全球标准在线推理参考价，单位为美元 / 百万 token。用本表费率重估所选记录。套餐内用量也计入估值，实际账单取决于套餐、超额设置与折扣。</p><div class="scroll"><table><thead><tr><th>模型</th><th>输入</th><th>输出</th><th>缓存读</th></tr></thead><tbody id="prices"></tbody></table></div><p>Carbon、Argon 按响应日期估价。按北京时间划分，2026 年 12 月 1 日前采用折后价，之后采用标准价。Google Cloud 通过抵扣额提供优惠。Flash 3.6–3.8 使用截至 12 月 31 日的公布价。Gemini 3.1 Pro 超过 20 万输入 token 使用长上下文费率。Orchestrator 按记录中的实际执行模型计量。缓存写入期限未知时不估算该响应价格。</p><a href="https://cloud.google.com/model-garden/pricing">Google 模型定价</a> · <a href="https://docs.cloud.google.com/gemini/enterprise/docs/quotas-and-pay-as-you-go-usage">Claude 参考价</a> · <a href="https://antigravity.google/docs/plans">套餐与额度</a></details></main>
+<script>
+const el=id=>document.getElementById(id);
+const rates={
+'gemini-4-neon':[3,15,.15],'gemini-4-carbon':[4,20,.2],'gemini-4-argon':[4,20,.2],'gemini-4-hydrogen':[1.5,7.5,.075],
+'gemini-3.8-flash':[.75,3.75,.075],'gemini-3.7-flash':[.75,3.75,.075],'gemini-3.6-flash':[.75,3.75,.075],'gemini-3.1-pro':[2,12,.2],
+'gpt-oss-120b':[.09,.36,null],'claude-opus-5-5':[4,20,.2],'claude-sonnet-5-5':[2,10,.2],'claude-opus-4-6':[5,25,.5],'claude-sonnet-4-6':[3,15,.3]};
+function tableRow(table,values){
+ const row=el(table).insertRow();
+ for(const v of values) row.insertCell().textContent=v;
+ return row;
+}
+const discounted = new Set(['gemini-4-carbon','gemini-4-argon']);
+const december = Date.parse('2026-12-01T00:00:00+08:00') / 1000;
+for(const [name,rate] of Object.entries(rates)){
+ if(discounted.has(name)) tableRow('prices',[name+'（至 11 月 30 日）',2,10,.1]);
+ tableRow('prices',[name+(discounted.has(name)?'（12 月 1 日起）':''),...rate.map(x=>x??"未公布")]);
+}
+tableRow('prices',['gemini-3.1-pro（长上下文）',4,18,.4]);
+
+const fmt=n=>n.toLocaleString('zh-CN');
+let data={rows:[],issues:[]};
+let active;
+function todayRange(){
+ const now = Date.now() + 8 * 3600000;
+ const day = ms => new Date(ms).toISOString().slice(0,10)+'T00:00';
+ return [day(now), day(now+86400000)];
+}
+function setRange(start,end,mode){
+ active = [start,end];
+ el('start').value=start;
+ el('end').value=end;
+ const params=new URLSearchParams({mode,start,end});
+ history.replaceState(null,'','#'+params);
+ render();
+}
+function render(){
+ const [start,end]=active;
+ const from=start?Date.parse(start+'+08:00')/1000:-Infinity;
+ const to=end?Date.parse(end+'+08:00')/1000:Infinity;
+ el('range').textContent='当前统计（北京时间）　'+(start.replace('T',' ')||'最早记录')+'　至　'+(end.replace('T',' ')||'最新记录');
+ const groups=new Map();
+ let total=0,count=0,cost=0,missing=0;
+ for(const [time,raw,i,o,r,w] of data.rows){
+  if(time<from || time>=to || (floating && time>Date.now()/1000)) continue;
+  const name=raw.replace(/-(high|medium|low|xhigh)$/,'');
+  const g=groups.get(name)||{n:0,i:0,o:0,r:0,w:0,total:0,cost:0,missing:0};
+  const tokens=i+o+r+w;
+  g.n++;g.i+=i;g.o+=o;g.r+=r;g.w+=w;g.total+=tokens;count++;total+=tokens;
+  let rate=rates[name];
+  if(discounted.has(name) && time<december) rate=[2,10,.1];
+  if(name==='gemini-3.1-pro' && i+r+w>200000) rate=[4,18,.4];
+  if(rate && !w && (!r || rate[2]!=null)){
+   const amount=(i*rate[0]+o*rate[1]+r*rate[2])/1e6;
+   g.cost+=amount;cost+=amount;
+  }else{g.missing++;missing++}
+  groups.set(name,g);
+ }
+ el('usage').replaceChildren();
+ for(const [name,g] of [...groups].sort((a,b)=>b[1].total-a[1].total)){
+  const share=g.total/total;
+  const row=tableRow('usage',[name,(share*100).toFixed(1)+'%',...[g.n,g.i,g.o,g.r,g.w].map(fmt),g.n===g.missing?'待定价':g.cost.toFixed(4)+(g.missing?' *':'')]);
+  const bar=document.createElement('meter');bar.value=share;row.cells[1].prepend(bar,' ');
+ }
+ el('total').textContent=fmt(total);el('count').textContent=fmt(count);
+ el('cost').textContent=(missing && missing===count)?'待定价':'$'+cost.toFixed(2);
+ el('msg').textContent=[from>=to?'截止时间须晚于开始时间。':count?'':'所选时段没有用量记录。',missing?'有 '+fmt(missing)+' 个响应缺少完整费率，金额只汇总可估价响应。':'',...data.issues].filter(Boolean).join(' ');
+}
+async function load(){
+ try{
+ const res=await fetch('/usage.json');if(!res.ok) throw Error(res.status);
+ data=await res.json();render();el('status').textContent='本机 · '+data.databases+' 个会话库 · '+new Date().toLocaleTimeString()+' 更新';
+ }catch(error){el('status').textContent='读取失败，请检查本机服务后刷新。'}
+}
+el('filters').onsubmit=event=>{
+ event.preventDefault();
+ const start=el('start').value,end=el('end').value;
+ if(!start || !end || start>=end){
+  el('msg').textContent='请填写完整起止时间，并确保截止时间晚于开始时间。当前统计时段尚未更改。';
+  return;
+ }
+ setRange(start,end,'custom');
+};
+el('filters').oninput=()=>{el('msg').textContent='点击「应用时段」更新统计。'};
+el('today').onclick=()=>setRange(...todayRange(),'today');
+el('all').onclick=()=>setRange('','','all');
+el('reload').onclick=load;
+const floating = !!window.webkit?.messageHandlers?.orb;
+if(floating){
+ document.body.classList.add('floating');
+ document.body.insertAdjacentHTML('beforeend', `<aside>
+  <button id="bubble" title="设置开始时间"><span class="orbit" aria-hidden="true"></span><small>累计 USD</small><strong id="balance">…</strong></button>
+  <form id="settings"><header>用量统计<button type="button" id="quit">退出</button></header>
+  <label>开始时间 · 北京时间<input id="since" type="datetime-local" step="1" required></label>
+  <footer><button type="button" id="now">从现在开始</button><button type="submit">保存</button></footer></form></aside>`);
+ const orbit=document.querySelector('.orbit');
+ for(let i=0;i<72;i++){
+  const dot=document.createElement('i');
+  const angle=i*2.399963;
+  const radius=32+19*Math.sin(i*1.27)**2;
+  const size=i%9===0?2:1;
+  dot.style.left=(61+radius*Math.cos(angle))+'px';
+  dot.style.top=(61+radius*Math.sin(angle))+'px';
+  dot.style.width=dot.style.height=size+'px';
+  dot.style.opacity=String(.3+.6*Math.cos(i*.9)**2);
+  dot.style.setProperty('--ink',i%3===0?'#d3b2ff':'#99f3da');
+  orbit.append(dot);
+ }
+ const localTime=ms=>new Date(ms+8*3600000).toISOString().slice(0,19);
+ let start=localStorage.getItem('orbStart') || localTime(Date.now());
+ function apply(value){
+  start=value;localStorage.setItem('orbStart',value);
+  active=[start,''];el('since').value=start;
+ }
+ function expand(open){
+  document.body.classList.toggle('editing',open);
+  window.webkit.messageHandlers.orb.postMessage(open?'expand':'collapse');
+ }
+ function show(){
+  render();
+  const incomplete=el('msg').textContent.includes('缺少完整费率')||data.issues.length;
+  el('balance').textContent=el('cost').textContent+(incomplete?'*':'');
+  el('bubble').title='北京时间 '+start.replace('T',' ')+' 起 · 按量参考价值'+(incomplete?' · 数据不完整':'');
+ }
+ let refreshing=false;
+ async function refresh(){
+  if(refreshing)return;
+  refreshing=true;
+  try{
+   const response=await fetch('/usage.json');
+   if(!response.ok)throw Error();
+   data=await response.json();show();
+  }catch{el('balance').textContent='读取失败'}
+  finally{refreshing=false}
+ }
+ el('bubble').onclick=()=>expand(!document.body.classList.contains('editing'));
+ el('settings').onsubmit=e=>{e.preventDefault();apply(el('since').value);show();expand(false);refresh()};
+ el('now').onclick=()=>{apply(localTime(Date.now()));show();expand(false);refresh()};
+ el('quit').onclick=()=>window.webkit.messageHandlers.orb.postMessage('quit');
+ apply(start);refresh();setInterval(refresh,5000);
+}else{
+const saved=new URLSearchParams(location.hash.slice(1));
+if(saved.get('mode')==='all') el('all').click();
+else if(saved.get('mode')==='custom' && ['start','end'].every(k=>/^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(saved.get(k))) && saved.get('start')<saved.get('end')) setRange(saved.get('start'),saved.get('end'),'custom');
+else el('today').click();
+load();setInterval(load,60000);
+}
+</script></html>
