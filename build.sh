@@ -8,7 +8,7 @@ trap 'rm -rf "$stage"' EXIT
 bundle="$stage/Antigravity Usage.app"
 contents="$bundle/Contents"
 mkdir -p "$contents/MacOS" "$contents/Resources"
-python3 -m PyInstaller --noconfirm --onefile --name UsageBackend --add-data "index.html:." \
+python3 -m PyInstaller --noconfirm --onefile --name UsageBackend --add-data "$PWD/index.html:." \
   --specpath "$stage" --workpath "$stage/work" --distpath "$contents/MacOS" app.py
 cp packaging/Info.plist "$contents/"
 /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $version" "$contents/Info.plist"
