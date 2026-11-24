@@ -3,14 +3,43 @@ on:
   push:
     tags: ['v*']
 permissions:
-  contents: write
+  contents: read
 jobs:
-  release:
-    runs-on: macos-15
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-      - run: RELEASE_VERSION="${GITHUB_REF_NAME#v}" ./build.sh
-      - name: Publish macOS ZIP
-        env:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m pip install 'pyinstaller==6.16.0'
+      - run: |
+          test "$(uname -m)" = "${{ matrix.arch }}"
+          RELEASE_VERSION="${GITHUB_REF_NAME#v}" ./build.sh
+      - name: Launch extracted app and verify usage
+        run: bash packaging/smoke.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: dist/*.zip
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/*.zip --verify-tag --title "Antigravity Usage $GITHUB_REF_NAME" --notes "macOS 13+ · Apple Silicon / Intel。解压后打开应用，单击悬浮球选择开始时间。运行需要 Apple Command Line Tools，安装包使用临时签名。"
+        run: gh release create "$GITHUB_REF_NAME" dist/*.zip --repo "$GITHUB_REPOSITORY" --verify-tag --title "Antigravity Usage $GITHUB_REF_NAME" --notes "选择 arm64（Apple Silicon）或 x86_64（Intel）。包含 Python 运行时。无边框独立排行面板支持按模型和聊天线程查看用量，修复会话库读取失败造成的金额回落。安装包使用临时签名，未经 Apple 公证。"

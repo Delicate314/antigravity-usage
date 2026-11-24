@@ -1,6 +1,24 @@
 import Cocoa
 import WebKit
 
+private extension URL {
+    var appendingRankFragment: URL { URL(string: "#rank", relativeTo: self)!.absoluteURL }
+}
+
+final class RankingPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override func sendEvent(_ event: NSEvent) {
+        let point = event.locationInWindow
+        // The trailing edge of the header contains the collapse button.
+        if event.type == .leftMouseDown, point.y > frame.height - 58,
+           point.x > 10, point.x < frame.width - 84 {
+            performDrag(with: event)
+            return
+        }
+        super.sendEvent(event)
+    }
+}
+
 class OrbPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override func sendEvent(_ event: NSEvent) {
@@ -37,13 +55,22 @@ class Orb: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigation
                           styleMask: [.borderless,.nonactivatingPanel], backing: .buffered, defer: false)
     let url = URL(string:"http://127.0.0.1:18742/")!
     var web: WKWebView!
+    var rankPanel: NSPanel?
     var backend: Process?
     func applicationDidFinishLaunching(_ note: Notification) {
         let task = Process()
-        task.executableURL = URL(fileURLWithPath:"/usr/bin/python3")
-        let folder = Bundle.main.resourceURL!
-        task.arguments = ["-B",folder.appendingPathComponent("app.py").path,"--quiet"]
-        try? task.run()
+        task.executableURL = Bundle.main.url(forAuxiliaryExecutable: "UsageBackend")
+        task.arguments = ["--quiet"]
+        do {
+            try task.run()
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "无法启动用量服务"
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
+            NSApp.terminate(nil)
+            return
+        }
         backend = task
         let config = WKWebViewConfiguration()
         config.userContentController.add(self,name:"orb")
@@ -64,12 +91,51 @@ class Orb: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigation
         web.load(URLRequest(url:url))
     }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        DispatchQueue.main.asyncAfter(deadline:.now()+1){ self.web.load(URLRequest(url:self.url)) }
+        DispatchQueue.main.asyncAfter(deadline:.now()+1){ webView.load(URLRequest(url:webView === self.web ? self.url : self.url.appendingRankFragment)) }
     }
+    func openRankPanel() {
+        if let panel = rankPanel {
+            panel.makeKeyAndOrderFront(nil)
+            return
+        }
+        let bounds = (window.screen ?? NSScreen.main)!.visibleFrame
+        let panel = RankingPanel(contentRect: NSRect(x:0, y:0, width:min(560,bounds.width), height:min(520,bounds.height-32)),
+                            styleMask:[.borderless,.resizable], backing:.buffered, defer:false)
+        panel.title = "Antigravity 用量排行"
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.minSize = NSSize(width:400,height:340)
+        panel.isReleasedWhenClosed = false
+        panel.level = .floating
+        panel.hidesOnDeactivate = false
+        panel.collectionBehavior = [.canJoinAllSpaces,.fullScreenAuxiliary]
+        let left = window.frame.minX - panel.frame.width - 8
+        let x = left >= bounds.minX ? left : window.frame.maxX + 8
+        panel.setFrameTopLeftPoint(NSPoint(x:min(max(x,bounds.minX),bounds.maxX-panel.frame.width),
+                                           y:min(bounds.maxY,max(window.frame.maxY,bounds.minY+panel.frame.height))))
+        let config = WKWebViewConfiguration()
+        config.userContentController.add(self,name:"orb")
+        let view = WKWebView(frame:.zero,configuration:config)
+        view.setValue(false, forKey:"drawsBackground")
+        panel.contentView = view
+        view.navigationDelegate = self
+        rankPanel = panel
+        panel.makeKeyAndOrderFront(nil)
+        view.load(URLRequest(url:url.appendingRankFragment))
+    }
+
     func userContentController(_ controller: WKUserContentController,didReceive message: WKScriptMessage){
         guard let action = message.body as? String else{return}
         if action == "quit" { NSApp.terminate(nil);return }
-        let size = action == "expand" ? NSSize(width:300,height:320) : NSSize(width:132,height:132)
+        if action == "closeRank" { rankPanel?.orderOut(nil);return }
+        var size = NSSize(width:132,height:132)
+        if action == "expand" { size = NSSize(width:320,height:378) }
+
+        if let bounds = window.screen?.visibleFrame {
+            size.width = min(size.width, bounds.width)
+            size.height = min(size.height, bounds.height)
+        }
         let prev = window.frame
         var x = prev.maxX-size.width
         var y = prev.maxY-size.height
@@ -78,7 +144,8 @@ class Orb: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigation
             y = min(max(y,screen.minY),screen.maxY-size.height)
         }
         window.setFrame(NSRect(origin:NSPoint(x:x,y:y),size:size),display:true)
-        if action == "expand" { NSApp.activate(ignoringOtherApps:true);window.makeKeyAndOrderFront(nil) }
+        if action == "rank" { openRankPanel();return }
+        if action != "collapse" { NSApp.activate(ignoringOtherApps:true);window.makeKeyAndOrderFront(nil) }
     }
     func applicationWillTerminate(_ notification: Notification) {
         if backend?.isRunning == true { backend?.terminate() }

@@ -2,6 +2,8 @@
 import json
 import re
 import sqlite3
+import shutil
+import tempfile
 import webbrowser
 from contextlib import closing
 from pathlib import Path
@@ -47,11 +49,12 @@ def fields(data, wanted):
     return result
 
 
-def read_db(path):
+def read_db(path, *, immutable=False):
     calls = []
     seen = {}
     skipped = 0
-    with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as db:
+    uri = path.as_uri() + ("?mode=ro&immutable=1" if immutable else "?mode=ro")
+    with closing(sqlite3.connect(uri, uri=True)) as db:
         db.execute("BEGIN")
         models = {}
         for idx, blob in db.execute("SELECT idx,data FROM gen_metadata WHERE data IS NOT NULL"):
@@ -89,6 +92,34 @@ def read_db(path):
     return calls, skipped
 
 
+def signature(path):
+    stat = path.stat()
+    wal = Path(str(path) + "-wal")
+    try:
+        log = wal.stat()
+        log_state = (log.st_ino, log.st_size, log.st_mtime_ns)
+    except FileNotFoundError:
+        log_state = None
+    return stat.st_ino, stat.st_size, stat.st_mtime_ns, log_state
+
+
+def refresh_db(path, before):
+    try:
+        return read_db(path)
+    except sqlite3.OperationalError:
+        # A closed WAL-mode DB can lack its sidecars. Read a private, stable
+        # copy so SQLite can initialize sidecars without touching the source.
+        journal = Path(str(path) + "-journal")
+        if before[-1] is not None or journal.exists():
+            raise
+        with tempfile.TemporaryDirectory() as folder:
+            copy = Path(folder) / "snapshot.db"
+            shutil.copyfile(path, copy)
+            if signature(path) != before or journal.exists():
+                raise sqlite3.OperationalError("会话库正在更新")
+            return read_db(copy, immutable=True)
+
+
 def snapshot():
     rows, issues = [], []
     paths = set(ROOT.glob("*.db"))
@@ -96,17 +127,27 @@ def snapshot():
         del cache[old]
     for path in paths:
         try:
-            wal = Path(str(path) + "-wal")
-            signature = (path.stat().st_mtime_ns, wal.stat().st_mtime_ns if wal.exists() else None)
-            if path not in cache or cache[path][0] != signature:
-                calls, skipped = read_db(path)
-                cache[path] = signature, calls, skipped
-            rows.extend(cache[path][1])
+            current = signature(path)
+            if path not in cache or cache[path][0] != current:
+                calls, skipped = refresh_db(path, current)
+                cache[path] = current, calls, skipped
+        except (OSError, sqlite3.Error) as error:
+            issues.append(f"{path.stem} 读取失败：{error}")
+        if path in cache:
+            rows.extend(row + [path.stem] for row in cache[path][1])
             if cache[path][2]:
                 issues.append(f"{cache[path][2]} 条记录解析失败")
-        except (OSError, sqlite3.Error) as error:
-            issues.append(str(error))
-    return dict(rows=rows, databases=len(paths), issues=issues)
+        else:
+            issues.append("用量数据不完整")
+    titles = {}
+    summary = ROOT.parent / "conversation_summaries.db"
+    if summary.exists():
+        try:
+            with closing(sqlite3.connect(summary.as_uri() + "?mode=ro", uri=True)) as db:
+                titles = dict(db.execute("SELECT conversation_id, title FROM conversation_summaries"))
+        except sqlite3.Error:
+            issues.append("部分线程标题暂时无法读取")
+    return dict(rows=rows, titles=titles, databases=len(paths), issues=issues)
 
 
 class Handler(BaseHTTPRequestHandler):

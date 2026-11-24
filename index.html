@@ -34,6 +34,40 @@ body.floating { background:transparent; color-scheme:dark; overflow:hidden }
 #settings button { font-size:12px;padding:7px 13px;border-radius:8px;background:#273b49;border-color:#475862 }
 #settings button[type=submit] { flex:1;background:#a5e5df;border-color:transparent;color:#112e36;font-weight:650 }
 #settings #quit { color:#afc2cf;background:none;border:0;padding:2px }
+#rankPanel {display:none}
+.ranking #settings {display:none}
+.ranking #rankPanel {display:flex;flex-direction:column;position:absolute;inset:0;border:0;border-radius:19px;
+ background:radial-gradient(ellipse at 0 0,#184344a8,transparent 57%),radial-gradient(ellipse at 100% 100%,#3027448c,transparent 55%),#101923;
+ color:#edf7ff;overflow:auto;padding:20px 24px;isolation:isolate}
+.ranking #bubble {visibility:hidden}
+#dust {position:absolute;inset:0;pointer-events:none;z-index:-1;overflow:hidden}
+#dust i {position:absolute;border-radius:50%;background:#a6f2f0;box-shadow:0 0 6px #87dfeb;animation:drift 9s ease-in-out infinite alternate}
+@keyframes drift{to{transform:translate(14px,-19px);opacity:.16}}
+@media(prefers-reduced-motion:reduce){#dust i{animation:none}}
+#rankPanel header,#rankPanel nav,#rankPanel form {display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+#rankPanel label {color:#bdd4dc;font-size:11px;flex:1;min-width:0}
+#rankPanel input,#rankPanel select,#rankPanel button {color:#e2edf4;background:#203642;border:1px solid #44616d;border-radius:8px;padding:7px;font:inherit;min-width:0}
+#rankPanel form {align-items:end;flex-wrap:wrap}
+#rankPanel table {white-space:normal;font-size:13px}
+#rankPanel tr{background:#132333e8}
+#rankPanel th,#rankPanel td {border-color:#314454;color:inherit}
+#rankPanel td:first-child{width:55%;overflow-wrap:anywhere}
+#rankPanel .scroll{min-height:0;overflow:auto}
+#rankPanel output{font-variant-numeric:tabular-nums;font-size:20px;color:#ace4dd;display:block;margin:2px 0 12px}
+#ranknote{color:#d2c7ad;font-size:12px;margin:4px 0}
+#rankPanel header{cursor:grab;min-height:32px;margin-bottom:19px}
+#rankPanel header h2{font-size:19px;font-weight:580;letter-spacing:.04em;margin:0}
+#rankPanel #closeRank{background:transparent;border:0;color:#a9c4c8;font-size:12px;cursor:pointer}
+#rankPanel input,#rankPanel select,#rankPanel form button{background:#192a35;border-color:#ffffff1c}
+#rankPanel form button{color:#abdfd5}
+#rankPanel nav{margin-top:10px}
+#rankPanel tr{background:transparent}
+#rankPanel th{color:#9bafb8;font-weight:500;font-size:11px}
+#rankPanel th,#rankPanel td{border-color:#ffffff12}
+#rankPanel td{font-variant-numeric:tabular-nums}
+#rankPanel output{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin:8px 0 6px}
+#rankPanel output strong{font-size:32px;letter-spacing:-1.4px;font-weight:500;color:#c3f3e5}
+#rankPanel output small{color:#a7b9c6;font-size:14px}
 </style><main><header><h1>Antigravity 用量</h1><p id="status">正在读取本机会话…</p></header>
 <section><form id="filters"><label>开始时间（北京时间）<input id="start" type="datetime-local"></label><label>截止时间（北京时间，不含）<input id="end" type="datetime-local"></label><button type="submit">应用时段</button><button type="button" id="today">今天</button><button type="button" id="all">全部时间</button><button type="button" id="reload">刷新数据</button></form><p id="range"></p><div id="msg" role="status"></div></section>
 <div class="stats"><div>累计 token<b id="total">—</b></div><div>模型响应数<b id="count">—</b></div><div>按量参考价值 · USD<b id="cost">—</b></div></div>
@@ -81,10 +115,12 @@ function render(){
  el('range').textContent='当前统计（北京时间）　'+(start.replace('T',' ')||'最早记录')+'　至　'+(end.replace('T',' ')||'最新记录');
  const groups=new Map();
  let total=0,count=0,cost=0,missing=0;
- for(const [time,raw,i,o,r,w] of data.rows){
+ const byThread=floating && el("groupBy")?.value==="thread";
+ for(const [time,raw,i,o,r,w,thread] of data.rows){
   if(time<from || time>=to || (floating && time>Date.now()/1000)) continue;
   const name=raw.replace(/-(high|medium|low|xhigh)$/,'');
-  const g=groups.get(name)||{n:0,i:0,o:0,r:0,w:0,total:0,cost:0,missing:0};
+  const key=byThread?thread:name;
+  const g=groups.get(key)||{n:0,i:0,o:0,r:0,w:0,total:0,cost:0,missing:0};
   const tokens=i+o+r+w;
   g.n++;g.i+=i;g.o+=o;g.r+=r;g.w+=w;g.total+=tokens;count++;total+=tokens;
   let rate=rates[name];
@@ -94,13 +130,25 @@ function render(){
    const amount=(i*rate[0]+o*rate[1]+r*rate[2])/1e6;
    g.cost+=amount;cost+=amount;
   }else{g.missing++;missing++}
-  groups.set(name,g);
+  groups.set(key,g);
  }
  el('usage').replaceChildren();
  for(const [name,g] of [...groups].sort((a,b)=>b[1].total-a[1].total)){
   const share=g.total/total;
   const row=tableRow('usage',[name,(share*100).toFixed(1)+'%',...[g.n,g.i,g.o,g.r,g.w].map(fmt),g.n===g.missing?'待定价':g.cost.toFixed(4)+(g.missing?' *':'')]);
   const bar=document.createElement('meter');bar.value=share;row.cells[1].prepend(bar,' ');
+ }
+ if(floating && document.body.classList.contains('ranking')){
+  const metric=el('sortBy').value;
+  el('rankRows').replaceChildren();
+  for(const [id,g] of [...groups].sort((a,b)=>b[1][metric]-a[1][metric])){
+   const label=byThread?(data.titles?.[id] || '未命名线程 · '+String(id).slice(0,8)):id;
+   tableRow('rankRows',[label,g.n===g.missing?'待定价':'$'+g.cost.toFixed(4)+(g.missing?'*':''),fmt(g.total)]);
+  }
+  el('rankName').textContent=byThread?'聊天线程':'模型';
+  el('rankUsd').textContent='$'+cost.toFixed(2);
+  el('rankTokens').textContent=fmt(total)+' token';
+  el('ranknote').textContent=[count?'':'所选时段没有记录',missing?'* 金额仅含可估价响应':'',...data.issues].filter(Boolean).join(' · ');
  }
  el('total').textContent=fmt(total);el('count').textContent=fmt(count);
  el('cost').textContent=(missing && missing===count)?'待定价':'$'+cost.toFixed(2);
@@ -132,7 +180,11 @@ if(floating){
   <button id="bubble" title="设置开始时间"><span class="orbit" aria-hidden="true"></span><small>累计 USD</small><strong id="balance">…</strong></button>
   <form id="settings"><header>用量统计<button type="button" id="quit">退出</button></header>
   <label>开始时间 · 北京时间<input id="since" type="datetime-local" step="1" required></label>
-  <footer><button type="button" id="now">从现在开始</button><button type="submit">保存</button></footer></form></aside>`);
+  <button type="button" id="openRank">展开用量排行 ↗</button><footer><button type="button" id="now">从现在开始</button><button type="submit">保存</button></footer></form>
+  <div id="rankPanel"><div id="dust" aria-hidden="true"></div><header><h2>用量排行</h2><button id="closeRank">收起</button></header>
+  <form id="period"><label>开始 · 北京时间<input id="rankStart" type="datetime-local" step="1" required></label><label>截止 · 留空持续统计<input id="until" type="datetime-local" step="1"></label><button>应用</button></form>
+  <output id="rankTotal"><strong id="rankUsd"></strong><small id="rankTokens"></small></output><nav><select id="groupBy" aria-label="分组"><option value="model">按模型</option><option value="thread">按聊天线程</option></select><select id="sortBy" aria-label="排序"><option value="cost">按 USD 从高到低</option><option value="total">按 token 从高到低</option></select></nav><div id="ranknote"></div>
+  <div class="scroll"><table><thead><tr><th id="rankName">模型</th><th>估算 USD</th><th>token</th></tr></thead><tbody id="rankRows"></tbody></table></div></div></aside>`);
  const orbit=document.querySelector('.orbit');
  for(let i=0;i<72;i++){
   const dot=document.createElement('i');
@@ -148,9 +200,16 @@ if(floating){
  }
  const localTime=ms=>new Date(ms+8*3600000).toISOString().slice(0,19);
  let start=localStorage.getItem('orbStart') || localTime(Date.now());
- function apply(value){
+ let end=localStorage.getItem('orbEnd') || '';
+ for(let i=0;i<56;i++){
+  const dot=document.createElement('i');
+  dot.style.cssText='left:'+(i*61.803%100)+'%;top:'+(i*i*1.733%100)+'%;width:2px;height:2px;opacity:.42;animation-delay:-'+(i%11)+'s';
+  el('dust').append(dot);
+ }
+ function apply(value,cutoff=end){
+  end=cutoff;localStorage.setItem('orbEnd',end);
   start=value;localStorage.setItem('orbStart',value);
-  active=[start,''];el('since').value=start;
+  active=[start,end];el('since').value=el('rankStart').value=start;el('until').value=end;
  }
  function expand(open){
   document.body.classList.toggle('editing',open);
@@ -159,7 +218,7 @@ if(floating){
  function show(){
   render();
   const incomplete=el('msg').textContent.includes('缺少完整费率')||data.issues.length;
-  el('balance').textContent=el('cost').textContent+(incomplete?'*':'');
+  el('balance').textContent=data.issues.includes('用量数据不完整')?'数据暂缺':el('cost').textContent+(incomplete?'*':'');
   el('bubble').title='北京时间 '+start.replace('T',' ')+' 起 · 按量参考价值'+(incomplete?' · 数据不完整':'');
  }
  let refreshing=false;
@@ -174,10 +233,32 @@ if(floating){
   finally{refreshing=false}
  }
  el('bubble').onclick=()=>expand(!document.body.classList.contains('editing'));
- el('settings').onsubmit=e=>{e.preventDefault();apply(el('since').value);show();expand(false);refresh()};
- el('now').onclick=()=>{apply(localTime(Date.now()));show();expand(false);refresh()};
+ el('openRank').onclick=()=>{
+  document.body.classList.remove('editing');
+  window.webkit.messageHandlers.orb.postMessage('rank');
+ };
+ el('closeRank').onclick=()=>{
+  window.webkit.messageHandlers.orb.postMessage('closeRank');
+ };
+ el('groupBy').onchange=el('sortBy').onchange=show;
+ el('period').onsubmit=e=>{
+  e.preventDefault();
+  const first=el('rankStart').value,last=el('until').value;
+  if(last && Date.parse(first+'+08:00')>=Date.parse(last+'+08:00')){
+   el('until').setCustomValidity('截止时间必须晚于开始时间');el('until').reportValidity();return;
+  }
+  apply(first,last);show();
+ };
+ el('period').oninput=()=>el('until').setCustomValidity('');
+ el('settings').onsubmit=e=>{e.preventDefault();apply(el('since').value,end && el('since').value<end?end:'');show();expand(false);refresh()};
+ el('now').onclick=()=>{apply(localTime(Date.now()),'');show();expand(false);refresh()};
  el('quit').onclick=()=>window.webkit.messageHandlers.orb.postMessage('quit');
- apply(start);refresh();setInterval(refresh,5000);
+ if(location.hash==='#rank')document.body.classList.add('ranking');
+ window.addEventListener('storage',event=>{
+  if(event.key!=='orbStart' && event.key!=='orbEnd')return;
+  apply(localStorage.getItem('orbStart')||start,localStorage.getItem('orbEnd')||'');show();
+ });
+ apply(start,end);refresh();setInterval(refresh,5000);
 }else{
 const saved=new URLSearchParams(location.hash.slice(1));
 if(saved.get('mode')==='all') el('all').click();
