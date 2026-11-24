@@ -10,7 +10,7 @@ hdiutil detach "$stage/mount"
 app="$stage/Antigravity Usage.app"
 codesign --verify --deep --strict "$app"
 for binary in UsageOrb UsageBackend; do
-  lipo -verify_arch "$(uname -m)" "$app/Contents/MacOS/$binary"
+  lipo "$app/Contents/MacOS/$binary" -verify_arch "$(uname -m)"
 done
 open "$app"
 curl -fsS --retry 12 --retry-connrefused --retry-delay 1 http://127.0.0.1:18742/usage.json | python3 -c 'import json,sys; assert json.load(sys.stdin)["rows"] == []'
