@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")"
-version=${RELEASE_VERSION:-1.2.0}
+version=${RELEASE_VERSION:-1.2.1}
 mkdir -p dist
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
@@ -18,4 +18,8 @@ xcrun swiftc -O -target "$arch-apple-macos13.0" Orb.swift -o "$contents/MacOS/Us
 /usr/libexec/PlistBuddy -c "Add :LSMinimumSystemVersion string 13.0" "$contents/Info.plist"
 codesign --force --sign - "$bundle"
 codesign --verify --strict "$bundle"
-ditto -c -k --keepParent "$bundle" dist/Antigravity-Usage-macOS-"$arch".zip
+installer="$stage/installer"
+mkdir "$installer"
+mv "$bundle" "$installer/"
+ln -s /Applications "$installer/Applications"
+hdiutil create -ov -format UDZO -volname "Antigravity Usage" -srcfolder "$installer" "dist/Antigravity-Usage-macOS-$arch.dmg"

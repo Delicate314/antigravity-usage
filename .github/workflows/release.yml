@@ -29,7 +29,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: macos-${{ matrix.arch }}
-          path: dist/*.zip
+          path: dist/*.dmg
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -42,4 +42,4 @@ jobs:
           merge-multiple: true
       - env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/*.zip --repo "$GITHUB_REPOSITORY" --verify-tag --title "Antigravity Usage $GITHUB_REF_NAME" --notes "选择 arm64（Apple Silicon）或 x86_64（Intel）。包含 Python 运行时。无边框独立排行面板支持按模型和聊天线程查看用量，修复会话库读取失败造成的金额回落。安装包使用临时签名，未经 Apple 公证。"
+        run: gh release create "$GITHUB_REF_NAME" dist/*.dmg --repo "$GITHUB_REPOSITORY" --verify-tag --title "Antigravity Usage $GITHUB_REF_NAME" --notes "选择 arm64（Apple Silicon）或 x86_64（Intel）。包含 Python 运行时。无边框独立排行面板支持按模型和聊天线程查看用量，修复会话库读取失败造成的金额回落。安装包使用临时签名，未经 Apple 公证。"

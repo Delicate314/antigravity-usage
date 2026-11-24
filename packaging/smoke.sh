@@ -2,7 +2,11 @@
 # Runs on a fresh macOS runner. Launch the app directly from its released ZIP.
 set -euo pipefail
 stage=$(mktemp -d)
-ditto -x -k dist/Antigravity-Usage-macOS-"$(uname -m)".zip "$stage"
+mkdir "$stage/mount"
+hdiutil attach -readonly -nobrowse -mountpoint "$stage/mount" dist/Antigravity-Usage-macOS-"$(uname -m)".dmg
+test "$(readlink "$stage/mount/Applications")" = /Applications
+ditto "$stage/mount/Antigravity Usage.app" "$stage/Antigravity Usage.app"
+hdiutil detach "$stage/mount"
 app="$stage/Antigravity Usage.app"
 codesign --verify --deep --strict "$app"
 for binary in UsageOrb UsageBackend; do
